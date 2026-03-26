@@ -2,26 +2,27 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
 
+    // 🔥 upload endpoint
     if (request.method === "POST" && url.pathname === "/upload") {
       const { filename, content } = await request.json()
 
-      // 🚫 Block banned words
+      // 🚫 block names
       const lower = filename.toLowerCase()
       if (lower.includes("mivora") || lower.includes("official")) {
-        return new Response("Filename contains banned words", { status: 400 })
+        return new Response("Blocked filename", { status: 400 })
       }
 
-      // Optional: basic safety (no weird paths)
       if (filename.includes("/") || filename.includes("..")) {
         return new Response("Invalid filename", { status: 400 })
       }
 
-      const githubRes = await fetch(
-        `https://api.github.com/repos/StormyECT/lua/contents/${filename}`,
+      // 📤 upload to YOUR repo /public
+      const res = await fetch(
+        `https://api.github.com/repos/StormyECT/lua/contents/public/${filename}`,
         {
           method: "PUT",
           headers: {
-            "Authorization": `Bearer ${env.GITHUB_TOKEN}`,
+            Authorization: `Bearer ${env.GITHUB_TOKEN}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
@@ -31,11 +32,9 @@ export default {
         }
       )
 
-      return new Response(await githubRes.text(), {
-        status: githubRes.status
-      })
+      return new Response(await res.text(), { status: res.status })
     }
 
-    return new Response("Worker running")
+    return new Response("OK")
   }
 }
