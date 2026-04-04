@@ -1,0 +1,301 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local ENEMY_COLOR = Color3.fromRGB(255, 0, 0)
+local TEAM_COLOR = Color3.fromRGB(0, 255, 0)
+
+local FILL_TRANSPARENCY = 0.5
+local OUTLINE_TRANSPARENCY = 0
+
+
+local espEnabled = true
+
+
+local aimbotEnabled = true
+local aimbotSmoothness = 0.25
+local aimPart = "Head"
+
+local isAiming = false
+local aimbotConnection = nil
+
+local function addHighlight(character, color)
+	if not character then return end
+	
+	local old = character:FindFirstChildOfClass("Highlight")
+	if old then
+		old:Destroy()
+	end
+
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "ESP_Highlight"
+	highlight.FillColor = color
+	highlight.OutlineColor = color
+	highlight.FillTransparency = FILL_TRANSPARENCY
+	highlight.OutlineTransparency = OUTLINE_TRANSPARENCY
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Adornee = character
+	highlight.Parent = character
+end
+
+local function getPlayerColor(player)
+	if not player.Team then
+		return ENEMY_COLOR
+	end
+	if LocalPlayer.Team and player.Team == LocalPlayer.Team then
+		return TEAM_COLOR
+	else
+		return ENEMY_COLOR
+	end
+end
+
+local function isEnemy(player)
+	if not player.Team then return true end
+	if LocalPlayer.Team and player.Team == LocalPlayer.Team then
+		return false
+	end
+	return true
+end
+
+local function setupPlayer(player)
+	if player == LocalPlayer then return end
+
+	local function onCharacterAdded(character)
+		character:WaitForChild("Humanoid", 5)
+		task.wait(0.3)
+		if espEnabled then
+			local color = getPlayerColor(player)
+			addHighlight(character, color)
+		end
+	end
+
+	if player.Character then
+		onCharacterAdded(player.Character)
+	end
+	
+	player.CharacterAdded:Connect(onCharacterAdded)
+	
+	player:GetPropertyChangedSignal("Team"):Connect(function()
+		if player.Character and espEnabled then
+			addHighlight(player.Character, getPlayerColor(player))
+		end
+	end)
+end
+
+
+for _, player in ipairs(Players:GetPlayers()) do
+	setupPlayer(player)
+end
+Players.PlayerAdded:Connect(setupPlayer)
+
+
+task.spawn(function()
+	while true do
+		task.wait(0.8)
+		if not espEnabled then continue end
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer and player.Character then
+				local color = getPlayerColor(player)
+				addHighlight(player.Character, color)
+			end
+		end
+	end
+end)
+
+
+local function getClosestEnemy()
+	local camera = Workspace.CurrentCamera
+	local mousePos = UserInputService:GetMouseLocation()
+	local closest = nil
+	local shortestDist = math.huge
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player == LocalPlayer or not isEnemy(player) then continue end
+		if not player.Character then continue end
+		
+		local targetPart = player.Character:FindFirstChild(aimPart) or player.Character:FindFirstChild("HumanoidRootPart")
+		if not targetPart then continue end
+		
+		local screenPos, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+		if not onScreen then continue end
+		
+		local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+		if dist < shortestDist then
+			shortestDist = dist
+			closest = targetPart
+		end
+	end
+	return closest
+end
+
+
+local function startAimbot()
+	if aimbotConnection then return end
+	
+	aimbotConnection = RunService.RenderStepped:Connect(function()
+		if not aimbotEnabled or not isAiming then return end
+		
+		local targetPart = getClosestEnemy()
+		if not targetPart then return end
+		
+		local camera = Workspace.CurrentCamera
+		local targetCFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+		
+		camera.CFrame = camera.CFrame:Lerp(targetCFrame, aimbotSmoothness)
+	end)
+end
+
+local function stopAimbot()
+	if aimbotConnection then
+		aimbotConnection:Disconnect()
+		aimbotConnection = nil
+	end
+end
+
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		isAiming = true
+		if aimbotEnabled then
+			startAimbot()
+		end
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		isAiming = false
+		stopAimbot()
+	end
+end)
+
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "Quantum Special"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "Main"
+mainFrame.Size = UDim2.new(0, 280, 0, 180)
+mainFrame.Position = UDim2.new(0.5, -140, 0.3, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = mainFrame
+
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.Size = UDim2.new(1, 0, 0, 40)
+title.BackgroundTransparency = 1
+title.Text = "Quantum’s special"
+title.TextColor3 = Color3.fromRGB(255, 0, 0)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.Parent = mainFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 8)
+titleCorner.Parent = title
+
+
+local espToggle = Instance.new("TextButton")
+espToggle.Name = "ESPToggle"
+espToggle.Size = UDim2.new(0.9, 0, 0, 35)
+espToggle.Position = UDim2.new(0.05, 0, 0, 55)
+espToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+espToggle.Text = "ESP: ON"
+espToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+espToggle.TextScaled = true
+espToggle.Font = Enum.Font.Gotham
+espToggle.Parent = mainFrame
+
+local espToggleCorner = Instance.new("UICorner")
+espToggleCorner.CornerRadius = UDim.new(0, 6)
+espToggleCorner.Parent = espToggle
+
+espToggle.MouseButton1Click:Connect(function()
+	espEnabled = not espEnabled
+	espToggle.Text = espEnabled and "ESP: ON" or "ESP: OFF"
+end)
+
+
+local aimToggle = Instance.new("TextButton")
+aimToggle.Name = "AimbotToggle"
+aimToggle.Size = UDim2.new(0.9, 0, 0, 35)
+aimToggle.Position = UDim2.new(0.05, 0, 0, 100)
+aimToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+aimToggle.Text = "Aimbot: ON (Right Click)"
+aimToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+aimToggle.TextScaled = true
+aimToggle.Font = Enum.Font.Gotham
+aimToggle.Parent = mainFrame
+
+local aimToggleCorner = Instance.new("UICorner")
+aimToggleCorner.CornerRadius = UDim.new(0, 6)
+aimToggleCorner.Parent = aimToggle
+
+aimToggle.MouseButton1Click:Connect(function()
+	aimbotEnabled = not aimbotEnabled
+	aimToggle.Text = aimbotEnabled and "Aimbot: ON (Right Click)" or "Aimbot: OFF"
+	if not aimbotEnabled then
+		isAiming = false
+		stopAimbot()
+	end
+end)
+
+
+local dragging = false
+local dragInput
+local dragStart
+local startPos
+
+mainFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = mainFrame.Position
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+mainFrame.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and input == dragInput then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+
+task.spawn(function()
+	while true do
+		task.wait(2)
+		if not espEnabled then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player.Character then
+					local old = player.Character:FindFirstChildOfClass("Highlight")
+					if old and old.Name == "ESP_Highlight" then
+						old:Destroy()
+					end
+				end
+			end
+		end
+	end
+end)
